@@ -1,0 +1,18 @@
+[project]
+name = "rag-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain-community>=0.3.26",
+    "langchain-openai>=0.3.25",
+    "langchain-qdrant>=0.2.0",
+    "langchain-text-splitters>=0.3.8",
+    "langgraph>=0.4.8",
+    "langgraph-checkpoint>=2.1.0",
+    "langgraph-checkpoint-mongodb>=0.1.4",
+    "openai>=1.90.0",
+    "pypdf>=5.6.1",
+    "python-dotenv>=1.1.0",
+]

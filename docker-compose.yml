@@ -1,0 +1,10 @@
+services:
+  vector-db:
+    image: qdrant/qdrant
+    ports:
+      - 6333:6333
+
+  checkpointer-db:
+    image: mongo:latest
+    ports:
+      - 27017:27017
