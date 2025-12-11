@@ -24,6 +24,7 @@ vector_store = QdrantVectorStore.from_documents(
     url="http://localhost:6333",
     collection_name="nodejs",
     embedding=embedding_model,
+    force_disable_check_same_thread=True,
 )
 
 print("Doc indexing complete!")

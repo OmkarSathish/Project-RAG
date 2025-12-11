@@ -22,7 +22,10 @@ class State(TypedDict):
 embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
 vector_db = QdrantVectorStore.from_existing_collection(
-    url="http://localhost:6333", collection_name="nodejs", embedding=embedding_model
+    url="http://localhost:6333",
+    collection_name="nodejs",
+    embedding=embedding_model,
+    force_disable_check_same_thread=True,
 )
 
 
@@ -125,7 +128,7 @@ with MongoDBSaver.from_conn_string(URI) as checkpointer:
             "run_count": 0,
             "relevance_score": None,
         }
-        final_state = rag_chain.invoke(rag_state)
+        final_state = rag_chain.invoke(rag_state, config)
         if final_state["run_count"] >= 3 and final_state["relevance_score"] < 5:
             print(
                 "Could not generate a highly relevant answer after 3 attempts. Here is the best attempt:"
