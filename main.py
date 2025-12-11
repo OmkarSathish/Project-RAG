@@ -7,10 +7,16 @@ from typing import List
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.mongodb import MongoDBSaver
 import asyncio
+import redis.asyncio as redis
+import hashlib
+import json
+from reranker import Reranker
 
 load_dotenv()
 
 llm = AsyncOpenAI()
+redis_client = None
+reranker = None
 
 
 class State(TypedDict):
@@ -30,16 +36,64 @@ vector_db = QdrantVectorStore.from_existing_collection(
 )
 
 
+async def get_redis_client():
+    """Initialize Redis client lazily"""
+    global redis_client
+    if redis_client is None:
+        redis_client = await redis.from_url("redis://localhost:6379")
+    return redis_client
+
+
+def get_reranker():
+    """Initialize reranker lazily (loaded once on first use)"""
+    global reranker
+    if reranker is None:
+        reranker = Reranker()
+    return reranker
+
+
 async def search_node(state: State):
     user_query = state["messages"][-1]["content"]
-    search_results = await vector_db.asimilarity_search(query=user_query, k=10)
-    context = "\n\n".join(
-        [
-            f"Page Content: {result.page_content}\n Page Number: {result.metadata['page_label']}\nFile Location:{result.metadata['source']}"
-            for result in search_results
-        ]
-    )
-    state["context"] = context
+
+    # Generate cache key from query hash
+    cache_key = f"search:{hashlib.md5(user_query.encode()).hexdigest()}"
+
+    # Try to get cached results
+    redis_conn = await get_redis_client()
+    cached_context = await redis_conn.get(cache_key)
+
+    if cached_context:
+        # Cache hit - use cached context
+        state["context"] = cached_context.decode("utf-8")
+        print("[Cache] Hit - Using cached search results")
+    else:
+        # Cache miss - perform search with reranking
+        print("[Cache] Miss - Performing vector search")
+
+        # Step 1: Initial retrieval with bi-encoder (fast, retrieve more candidates)
+        initial_results = await vector_db.asimilarity_search(query=user_query, k=10)
+
+        # Step 2: Rerank with cross-encoder (slower but more accurate)
+        reranker_model = get_reranker()
+        reranked_results = await asyncio.to_thread(
+            reranker_model.rerank,
+            user_query,
+            initial_results,
+            top_k=4  # Return top 4 most relevant documents
+        )
+
+        # Step 3: Format context from reranked results
+        context = "\n\n".join(
+            [
+                f"Page Content: {result.page_content}\n Page Number: {result.metadata['page_label']}\nFile Location:{result.metadata['source']}"
+                for result in reranked_results
+            ]
+        )
+
+        # Cache results for 5 minutes (300 seconds)
+        await redis_conn.setex(cache_key, 300, context)
+        state["context"] = context
+
     return state
 
 

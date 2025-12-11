@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+/mongo_data
+/qdrant_data
+/redis_data
+/rabbitmq_data
