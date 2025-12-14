@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Multi-Client Demo - Async Performance</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 RAG System - Async Multi-Client Demo</h1>
+            <p class="subtitle">Demonstrating Non-Blocking Concurrent Processing</p>
+        </header>
+
+        <!-- Metrics Dashboard -->
+        <div class="metrics-dashboard">
+            <div class="metric-card">
+                <div class="metric-value" id="total-queries">0</div>
+                <div class="metric-label">Total Queries</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="cache-hit-rate">0%</div>
+                <div class="metric-label">Cache Hit Rate</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="avg-time">0s</div>
+                <div class="metric-label">Avg Response Time</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="active-clients">0</div>
+                <div class="metric-label">Active Clients</div>
+            </div>
+        </div>
+
+        <!-- Client Panels -->
+        <div class="clients-grid">
+            <!-- Client 1 -->
+            <div class="client-panel" id="client-1">
+                <div class="client-header">
+                    <h3>Client 1</h3>
+                    <span class="status-badge" id="status-1">Ready</span>
+                </div>
+                <div class="query-input">
+                    <input type="text" id="query-1" placeholder="Enter your question..." />
+                    <button onclick="sendQuery('1')">Send</button>
+                </div>
+                <div class="response-area" id="response-1"></div>
+                <div class="client-stats">
+                    <span id="time-1" class="stat">Time: -</span>
+                    <span id="cache-1" class="stat">Cache: -</span>
+                </div>
+            </div>
+
+            <!-- Client 2 -->
+            <div class="client-panel" id="client-2">
+                <div class="client-header">
+                    <h3>Client 2</h3>
+                    <span class="status-badge" id="status-2">Ready</span>
+                </div>
+                <div class="query-input">
+                    <input type="text" id="query-2" placeholder="Enter your question..." />
+                    <button onclick="sendQuery('2')">Send</button>
+                </div>
+                <div class="response-area" id="response-2"></div>
+                <div class="client-stats">
+                    <span id="time-2" class="stat">Time: -</span>
+                    <span id="cache-2" class="stat">Cache: -</span>
+                </div>
+            </div>
+
+            <!-- Client 3 -->
+            <div class="client-panel" id="client-3">
+                <div class="client-header">
+                    <h3>Client 3</h3>
+                    <span class="status-badge" id="status-3">Ready</span>
+                </div>
+                <div class="query-input">
+                    <input type="text" id="query-3" placeholder="Enter your question..." />
+                    <button onclick="sendQuery('3')">Send</button>
+                </div>
+                <div class="response-area" id="response-3"></div>
+                <div class="client-stats">
+                    <span id="time-3" class="stat">Time: -</span>
+                    <span id="cache-3" class="stat">Cache: -</span>
+                </div>
+            </div>
+
+            <!-- Client 4 -->
+            <div class="client-panel" id="client-4">
+                <div class="client-header">
+                    <h3>Client 4</h3>
+                    <span class="status-badge" id="status-4">Ready</span>
+                </div>
+                <div class="query-input">
+                    <input type="text" id="query-4" placeholder="Enter your question..." />
+                    <button onclick="sendQuery('4')">Send</button>
+                </div>
+                <div class="response-area" id="response-4"></div>
+                <div class="client-stats">
+                    <span id="time-4" class="stat">Time: -</span>
+                    <span id="cache-4" class="stat">Cache: -</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Test Buttons -->
+        <div class="test-controls">
+            <h3>Quick Tests:</h3>
+            <button onclick="testScenario1()" class="test-btn">Test 1: Cache Performance</button>
+            <button onclick="testScenario2()" class="test-btn">Test 2: Non-Blocking Demo</button>
+            <button onclick="clearAll()" class="test-btn clear-btn">Clear All</button>
+        </div>
+
+        <footer>
+            <p>💡 Tip: Send queries from multiple clients simultaneously to see async behavior!</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
