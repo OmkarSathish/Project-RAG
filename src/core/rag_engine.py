@@ -28,6 +28,7 @@ class State(TypedDict):
     context: str
     relevance_score: int | None
     run_count: int
+    cache_hit: bool
 
 
 class RAGEngine:
