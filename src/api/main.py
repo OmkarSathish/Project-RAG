@@ -4,6 +4,8 @@ FastAPI Application with WebSocket support for multi-client RAG demo.
 This demonstrates async/non-blocking behavior with 4 concurrent clients.
 """
 
+from datetime import datetime
+from collections import deque
 from core.rag_engine import RAGEngine
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -40,10 +42,20 @@ metrics = {
 }
 
 
+query_log = deque(maxlen=50)
+active_queries = {}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Serve the main UI"""
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/monitor", response_class=HTMLResponse)
+async def monitor(request: Request):
+    """Serve the monitoring dashboard"""
+    return templates.TemplateResponse("monitor.html", {"request": request})
 
 
 @app.get("/metrics")
@@ -66,6 +78,26 @@ async def get_metrics():
         "cache_hit_rate": cache_hit_rate,
         "avg_response_time": avg_time,
         "active_clients": len(active_connections),
+    }
+
+
+@app.get("/monitor/data")
+async def get_monitor_data():
+    """Get detailed monitoring data"""
+    return {
+        "query_log": list(query_log),
+        "active_queries": active_queries,
+        "metrics": {
+            "total_queries": metrics["total_queries"],
+            "cache_hits": metrics["cache_hits"],
+            "cache_misses": metrics["total_queries"] - metrics["cache_hits"],
+            "cache_hit_rate": round((metrics["cache_hits"] / metrics["total_queries"]) * 100, 1) if metrics["total_queries"] > 0 else 0,
+            "avg_response_time": round(metrics["total_time"] / metrics["total_queries"], 2) if metrics["total_queries"] > 0 else 0,
+        },
+        "connections": {
+            "active_clients": len(active_connections),
+            "client_ids": list(active_connections.keys()),
+        }
     }
 
 
@@ -94,6 +126,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
             if data["type"] == "query":
                 query = data["query"]
+                query_id = f"{client_id}_{datetime.now().timestamp()}"
+
+                query_entry = {
+                    "query_id": query_id,
+                    "client_id": client_id,
+                    "query": query,
+                    "timestamp": datetime.now().isoformat(),
+                    "status": "processing",
+                    "cache_hit": None,
+                    "processing_time": None,
+                }
+                active_queries[query_id] = query_entry
 
                 # Send processing status
                 await websocket.send_json(
@@ -107,6 +151,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 try:
                     # Process query (async, non-blocking!)
                     result = await rag_engine.process_query(query, client_id)
+
+                    query_entry["status"] = "completed"
+                    query_entry["cache_hit"] = result["cache_hit"]
+                    query_entry["processing_time"] = result["processing_time"]
+
+                    query_log.append(query_entry.copy())
+                    del active_queries[query_id]
 
                     # Update metrics
                     metrics["total_queries"] += 1
@@ -138,6 +189,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     )
 
                 except Exception as e:
+                    # Update query entry on error
+                    query_entry["status"] = "error"
+                    query_entry["error"] = str(e)
+                    query_log.append(query_entry.copy())
+                    if query_id in active_queries:
+                        del active_queries[query_id]
+
                     await websocket.send_json(
                         {"type": "error",
                             "message": f"Error processing query: {str(e)}"}
