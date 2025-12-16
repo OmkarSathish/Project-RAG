@@ -9,8 +9,13 @@
 <body>
     <div class="container">
         <header>
-            <h1>🚀 RAG System - Async Multi-Client Demo</h1>
+            <h1>RAG System - Async Multi-Client Demo</h1>
             <p class="subtitle">Demonstrating Non-Blocking Concurrent Processing</p>
+            <div style="margin-top: 15px;">
+                <a href="/monitor" style="color: #ffffff; text-decoration: none; padding: 10px 20px; background: #3b82f6; border-radius: 8px; font-weight: 600; display: inline-block; transition: background 0.3s; border: 1px solid #60a5fa;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                    View Monitoring Dashboard
+                </a>
+            </div>
         </header>
 
         <!-- Metrics Dashboard -->
@@ -111,10 +116,6 @@
             <button onclick="testScenario2()" class="test-btn">Test 2: Non-Blocking Demo</button>
             <button onclick="clearAll()" class="test-btn clear-btn">Clear All</button>
         </div>
-
-        <footer>
-            <p>💡 Tip: Send queries from multiple clients simultaneously to see async behavior!</p>
-        </footer>
     </div>
 
     <script src="/static/js/app.js"></script>

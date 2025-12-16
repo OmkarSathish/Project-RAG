@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG System Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .nav-links a {
+            color: #ffffff;
+            text-decoration: none;
+            padding: 10px 20px;
+            background: #333333;
+            border-radius: 5px;
+            margin: 0 10px;
+            display: inline-block;
+            transition: background 0.3s;
+            border: 1px solid #555555;
+        }
+
+        .nav-links a:hover {
+            background: #444444;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: #2a2a2a;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid #444444;
+        }
+
+        .metric-card h3 {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metric-card .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .metric-card.cache-hit .value {
+            color: #22c55e;
+        }
+
+        .metric-card.cache-miss .value {
+            color: #ef4444;
+        }
+
+        .section {
+            background: #2a2a2a;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            border: 1px solid #444444;
+        }
+
+        .section h2 {
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #555555;
+            padding-bottom: 10px;
+        }
+
+        .query-queue {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .query-item {
+            background: #333333;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .query-item.processing {
+            border-left-color: #3b82f6;
+            animation: pulse 2s infinite;
+        }
+
+        .query-item.cache-hit {
+            border-left-color: #22c55e;
+        }
+
+        .query-item.cache-miss {
+            border-left-color: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .query-item .query-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .query-item .client-id {
+            font-weight: bold;
+            color: #ffffff;
+        }
+
+        .query-item .timestamp {
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .query-item .query-text {
+            margin-bottom: 8px;
+            font-style: italic;
+        }
+
+        .query-item .query-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 0.9rem;
+        }
+
+        .query-item .stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .badge.hit {
+            background: #22c55e;
+            color: #ffffff;
+        }
+
+        .badge.miss {
+            background: #ef4444;
+            color: #ffffff;
+        }
+
+        .badge.processing {
+            background: #3b82f6;
+            color: #ffffff;
+        }
+
+        .active-clients {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .client-badge {
+            background: #3b82f6;
+            padding: 8px 15px;
+            border-radius: 20px;
+            border: 2px solid #60a5fa;
+            font-weight: bold;
+            color: #ffffff;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.6;
+        }
+
+        .chart-container {
+            height: 200px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            align-items: flex-end;
+            gap: 5px;
+            justify-content: space-between;
+        }
+
+        .chart-bar {
+            flex: 1;
+            background: linear-gradient(to top, #3b82f6, #60a5fa);
+            border-radius: 5px 5px 0 0;
+            min-height: 20px;
+            transition: height 0.3s ease;
+            position: relative;
+        }
+
+        .chart-bar.hit {
+            background: linear-gradient(to top, #22c55e, #4ade80);
+        }
+
+        .chart-bar.miss {
+            background: linear-gradient(to top, #ef4444, #f87171);
+        }
+
+        .refresh-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #3b82f6;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+            border: 1px solid #60a5fa;
+        }
+
+        .spinner {
+            width: 15px;
+            height: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="refresh-indicator">
+        <div class="spinner"></div>
+        <span>Live Monitoring</span>
+    </div>
+
+    <div class="header">
+        <h1>RAG System Monitor</h1>
+        <p>Real-time Cache, Queue & Performance Analytics</p>
+    </div>
+
+    <div class="nav-links">
+        <a href="/">Back to Client Demo</a>
+    </div>
+
+    <!-- Metrics Dashboard -->
+    <div class="dashboard-grid">
+        <div class="metric-card">
+            <h3>Total Queries</h3>
+            <div class="value" id="total-queries">0</div>
+        </div>
+        <div class="metric-card cache-hit">
+            <h3>Cache Hits</h3>
+            <div class="value" id="cache-hits">0</div>
+        </div>
+        <div class="metric-card cache-miss">
+            <h3>Cache Misses</h3>
+            <div class="value" id="cache-misses">0</div>
+        </div>
+        <div class="metric-card">
+            <h3>Hit Rate</h3>
+            <div class="value" id="hit-rate">0%</div>
+        </div>
+        <div class="metric-card">
+            <h3>Avg Time</h3>
+            <div class="value" id="avg-time">0s</div>
+        </div>
+        <div class="metric-card">
+            <h3>Active Clients</h3>
+            <div class="value" id="active-clients">0</div>
+        </div>
+    </div>
+
+    <!-- Active Queries Queue -->
+    <div class="section">
+        <h2>Processing Queue (Active Queries)</h2>
+        <div class="query-queue" id="active-queue">
+            <div class="empty-state">No queries being processed</div>
+        </div>
+    </div>
+
+    <!-- Recent Query Log -->
+    <div class="section">
+        <h2>Recent Query Log (Last 50)</h2>
+        <div class="query-queue" id="query-log">
+            <div class="empty-state">No queries yet</div>
+        </div>
+    </div>
+
+    <!-- Connected Clients -->
+    <div class="section">
+        <h2>Connected Clients</h2>
+        <div class="active-clients" id="client-list">
+            <div class="empty-state">No clients connected</div>
+        </div>
+    </div>
+
+    <script>
+        // Store previous query log to detect changes
+        let previousQueryLog = [];
+
+        // Fetch and update dashboard data
+        async function updateDashboard() {
+            try {
+                const response = await fetch('/monitor/data');
+                const data = await response.json();
+
+                // Update metrics (these are small and can be updated directly)
+                updateTextContent('total-queries', data.metrics.total_queries);
+                updateTextContent('cache-hits', data.metrics.cache_hits);
+                updateTextContent('cache-misses', data.metrics.cache_misses);
+                updateTextContent('hit-rate', data.metrics.cache_hit_rate.toFixed(1) + '%');
+                updateTextContent('avg-time', data.metrics.avg_response_time + 's');
+                updateTextContent('active-clients', data.connections.active_clients);
+
+                // Update active queries (always regenerate as these change frequently)
+                const activeQueue = document.getElementById('active-queue');
+                if (Object.keys(data.active_queries).length === 0) {
+                    if (!activeQueue.querySelector('.empty-state')) {
+                        activeQueue.innerHTML = '<div class="empty-state">No queries being processed</div>';
+                    }
+                } else {
+                    activeQueue.innerHTML = Object.values(data.active_queries)
+                        .map(query => renderQueryItem(query))
+                        .join('');
+                }
+
+                // Update query log ONLY if it changed
+                const queryLog = document.getElementById('query-log');
+                const reversedLog = [...data.query_log].reverse();
+
+                if (data.query_log.length === 0) {
+                    if (!queryLog.querySelector('.empty-state')) {
+                        queryLog.innerHTML = '<div class="empty-state">No queries yet</div>';
+                    }
+                } else if (hasQueryLogChanged(reversedLog)) {
+                    // Only update if the log actually changed
+                    queryLog.innerHTML = reversedLog
+                        .map(query => renderQueryItem(query))
+                        .join('');
+                    previousQueryLog = reversedLog;
+                }
+
+                // Update connected clients
+                updateClientList(data.connections.client_ids);
+            } catch (error) {
+                console.error('Error fetching monitor data:', error);
+            }
+        }
+
+        // Helper function to update text content only if changed
+        function updateTextContent(elementId, newValue) {
+            const element = document.getElementById(elementId);
+            if (element && element.textContent !== String(newValue)) {
+                element.textContent = newValue;
+            }
+        }
+
+        // Check if query log has changed
+        function hasQueryLogChanged(newLog) {
+            if (previousQueryLog.length !== newLog.length) {
+                return true;
+            }
+
+            for (let i = 0; i < newLog.length; i++) {
+                if (newLog[i].query_id !== previousQueryLog[i]?.query_id ||
+                    newLog[i].status !== previousQueryLog[i]?.status ||
+                    newLog[i].cache_hit !== previousQueryLog[i]?.cache_hit) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Update client list only if changed
+        function updateClientList(clientIds) {
+            const clientList = document.getElementById('client-list');
+            const currentClients = Array.from(clientList.querySelectorAll('.client-badge'))
+                .map(el => el.textContent);
+
+            if (clientIds.length === 0) {
+                if (!clientList.querySelector('.empty-state')) {
+                    clientList.innerHTML = '<div class="empty-state">No clients connected</div>';
+                }
+            } else if (JSON.stringify(currentClients) !== JSON.stringify(clientIds)) {
+                clientList.innerHTML = clientIds
+                    .map(id => `<div class="client-badge">${id}</div>`)
+                    .join('');
+            }
+        }
+
+        function renderQueryItem(query) {
+            const statusClass = query.status === 'processing' ? 'processing' :
+                               query.cache_hit === true ? 'cache-hit' : 'cache-miss';
+
+            const statusBadge = query.status === 'processing' ?
+                '<span class="badge processing">Processing</span>' :
+                query.cache_hit ?
+                '<span class="badge hit">Cache Hit</span>' :
+                '<span class="badge miss">Cache Miss</span>';
+
+            const timestamp = new Date(query.timestamp).toLocaleTimeString();
+
+            return `
+                <div class="query-item ${statusClass}">
+                    <div class="query-header">
+                        <span class="client-id">${query.client_id}</span>
+                        <span class="timestamp">${timestamp}</span>
+                    </div>
+                    <div class="query-text">"${query.query}"</div>
+                    <div class="query-stats">
+                        <div class="stat">${statusBadge}</div>
+                        ${query.processing_time !== null ?
+                            `<div class="stat">Time: ${query.processing_time}s</div>` :
+                            '<div class="stat">Time: Processing...</div>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Update every 500ms for real-time feel
+        updateDashboard();
+        setInterval(updateDashboard, 500);
+    </script>
+</body>
+</html>
