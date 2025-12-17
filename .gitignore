@@ -12,3 +12,6 @@ wheels/
 /qdrant_data
 /redis_data
 /rabbitmq_data
+
+.env
+.env.dev
