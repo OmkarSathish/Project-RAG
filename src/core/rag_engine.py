@@ -89,10 +89,10 @@ class RAGEngine:
                 reranker_model.rerank, user_query, initial_results, top_k=4
             )
 
-            # Format context
+            # Format context - handle both LangChain and direct Qdrant payload formats
             context = "\n\n".join(
                 [
-                    f"Page Content: {result.page_content}\n Page Number: {result.metadata['page_label']}\nFile Location:{result.metadata['source']}"
+                    f"Page Content: {result.page_content}\n Page Number: {result.metadata.get('page_label', result.metadata.get('page', 'N/A'))}\nFile Location:{result.metadata.get('source', 'Unknown')}"
                     for result in reranked_results
                 ]
             )

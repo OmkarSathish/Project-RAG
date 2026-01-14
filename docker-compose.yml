@@ -1,19 +1,29 @@
 version: '3.8'
 
 services:
-  # Qdrant Vector Database
-  vector-db:
+  # ============================================
+  # QDRANT VECTOR DATABASE
+  # ============================================
+  qdrant:
     image: qdrant/qdrant:v1.16.2
     container_name: qdrant
     ports:
       - "6333:6333"
+      - "6334:6334"
     volumes:
       - ./qdrant_data:/qdrant/storage
     networks:
       - rag_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # MongoDB for state persistence
-  checkpointer-db:
+  # ============================================
+  # MONGODB FOR STATE PERSISTENCE
+  # ============================================
+  mongodb:
     image: mongo:7
     container_name: mongodb
     ports:
@@ -22,26 +32,41 @@ services:
       - ./mongo_data:/data/db
     networks:
       - rag_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Redis for caching
+  # ============================================
+  # REDIS FOR CACHING
+  # ============================================
   redis:
     image: redis:7-alpine
     container_name: redis
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
     volumes:
       - ./redis_data:/data
-    command: redis-server --appendonly yes
     networks:
       - rag_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  # RabbitMQ for message queuing
+  # ============================================
+  # RABBITMQ FOR MESSAGE QUEUING
+  # ============================================
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: rabbitmq
+    hostname: rabbitmq
     ports:
-      - "5672:5672"   # AMQP
-      - "15672:15672" # Management UI
+      - "5672:5672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: raguser
       RABBITMQ_DEFAULT_PASS: ragpass
@@ -49,13 +74,54 @@ services:
       - ./rabbitmq_data:/var/lib/rabbitmq
     networks:
       - rag_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # MONITORING STACK
+  # ============================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - rag_network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - rag_network
 
 networks:
   rag_network:
     driver: bridge
-
-volumes:
-  qdrant_data:
-  mongo_data:
-  redis_data:
-  rabbitmq_data:

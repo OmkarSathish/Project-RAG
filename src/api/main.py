@@ -6,6 +6,13 @@ This demonstrates async/non-blocking behavior with 4 concurrent clients.
 
 from datetime import datetime
 from collections import deque
+from pathlib import Path
+import sys
+
+# Add src to path BEFORE importing local modules
+src_path = Path(__file__).parent.parent
+sys.path.insert(0, str(src_path))
+
 from core.rag_engine import RAGEngine
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -13,12 +20,6 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi import Request
 import asyncio
-from pathlib import Path
-import sys
-
-# Add src to path
-src_path = Path(__file__).parent.parent
-sys.path.insert(0, str(src_path))
 
 
 app = FastAPI(title="RAG Multi-Client Demo")

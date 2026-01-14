@@ -1,0 +1,63 @@
+# Prometheus Configuration for RAG Distributed System
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'rag-cluster'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+
+  # Redis Cluster Metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'redis-cluster'
+
+  # MongoDB Replica Set Metrics
+  - job_name: 'mongodb'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'mongodb-replicaset'
+
+  # RabbitMQ Cluster Metrics
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq-exporter:9419']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'rabbitmq-cluster'
+
+  # Qdrant Cluster Metrics (native metrics endpoint)
+  - job_name: 'qdrant'
+    static_configs:
+      - targets: 
+        - 'qdrant-node-1:6333'
+        - 'qdrant-node-2:6333'
+        - 'qdrant-node-3:6333'
+    metrics_path: /metrics
+
+  # FastAPI Application Metrics (if instrumented)
+  - job_name: 'rag-api'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: /metrics

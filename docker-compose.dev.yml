@@ -1,0 +1,64 @@
+# Docker Compose Override for Development (Single Node)
+# Use this for local development without full cluster:
+# docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+version: '3.8'
+
+services:
+  # Single Qdrant node
+  qdrant-node-1:
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    environment:
+      QDRANT__CLUSTER__ENABLED: "false"
+
+  # Disable other Qdrant nodes
+  qdrant-node-2:
+    profiles: ["cluster"]
+  qdrant-node-3:
+    profiles: ["cluster"]
+
+  # Single MongoDB (no replica set)
+  mongo-primary:
+    command: mongod --bind_ip_all --port 27017
+
+  # Disable secondary MongoDB nodes
+  mongo-secondary-1:
+    profiles: ["cluster"]
+  mongo-secondary-2:
+    profiles: ["cluster"]
+  mongo-init:
+    profiles: ["cluster"]
+
+  # Single Redis node
+  redis-node-1:
+    command: redis-server --appendonly yes
+
+  # Disable other Redis nodes
+  redis-node-2:
+    profiles: ["cluster"]
+  redis-node-3:
+    profiles: ["cluster"]
+  redis-node-4:
+    profiles: ["cluster"]
+  redis-node-5:
+    profiles: ["cluster"]
+  redis-node-6:
+    profiles: ["cluster"]
+  redis-cluster-init:
+    profiles: ["cluster"]
+
+  # Disable other RabbitMQ nodes
+  rabbitmq-node-2:
+    profiles: ["cluster"]
+  rabbitmq-node-3:
+    profiles: ["cluster"]
+
+  # Disable exporters in dev
+  redis-exporter:
+    profiles: ["monitoring"]
+  mongodb-exporter:
+    profiles: ["monitoring"]
+  rabbitmq-exporter:
+    profiles: ["monitoring"]
