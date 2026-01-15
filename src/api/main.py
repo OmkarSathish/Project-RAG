@@ -2,18 +2,29 @@
 FastAPI Application with WebSocket support for multi-client RAG demo.
 
 This demonstrates async/non-blocking behavior with 4 concurrent clients.
+
+Supports two modes:
+- Single node (default): Uses single-node database connections
+- Distributed: Uses cluster-aware database connections
+
+Set RAG_MODE=distributed environment variable to enable distributed mode.
 """
 
 from datetime import datetime
 from collections import deque
 from pathlib import Path
+from contextlib import asynccontextmanager
 import sys
+import os
 
-# Add src to path BEFORE importing local modules
+# Add src and project root to path BEFORE importing local modules
 src_path = Path(__file__).parent.parent
+project_root = src_path.parent
 sys.path.insert(0, str(src_path))
+sys.path.insert(0, str(project_root))
 
-from core.rag_engine import RAGEngine
+from core.engine_factory import create_rag_engine, shutdown_engine, get_engine_info
+from core.config import get_config
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -22,7 +33,34 @@ from fastapi import Request
 import asyncio
 
 
-app = FastAPI(title="RAG Multi-Client Demo")
+# Global RAG engine (initialized on startup)
+rag_engine = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle manager for startup/shutdown"""
+    global rag_engine
+    
+    # Startup
+    print(f"[API] Starting RAG server...")
+    config = get_config()
+    print(f"[API] Mode: {config.mode.value}")
+    
+    rag_engine = await create_rag_engine()
+    print(f"[API] RAG engine initialized")
+    
+    yield
+    
+    # Shutdown
+    print(f"[API] Shutting down...")
+    await shutdown_engine()
+
+
+app = FastAPI(
+    title="RAG Multi-Client Demo",
+    lifespan=lifespan,
+)
 
 # Mount static files
 static_path = Path(__file__).parent.parent / "ui" / "static"
@@ -30,9 +68,6 @@ templates_path = Path(__file__).parent.parent / "ui" / "templates"
 
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 templates = Jinja2Templates(directory=str(templates_path))
-
-# Initialize RAG engine
-rag_engine = RAGEngine()
 
 # Track active connections
 active_connections: dict[str, WebSocket] = {}
@@ -51,6 +86,12 @@ active_queries = {}
 async def home(request: Request):
     """Serve the main UI"""
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/mode")
+async def get_mode():
+    """Get current engine mode and configuration"""
+    return get_engine_info()
 
 
 @app.get("/monitor", response_class=HTMLResponse)

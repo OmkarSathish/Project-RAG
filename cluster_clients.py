@@ -6,12 +6,19 @@ This module provides production-grade client wrappers with:
 - Load balancing across cluster nodes
 - Health checking and node discovery
 - Connection pooling
+
+Usage:
+    from cluster_clients import DistributedClientManager, ClusterConfig
+    
+    config = ClusterConfig()
+    manager = DistributedClientManager(config)
+    await manager.connect_all()
 """
 
 import asyncio
 import hashlib
 from typing import List, Optional, Dict, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import redis.asyncio as redis
 from redis.asyncio.cluster import RedisCluster
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -21,39 +28,83 @@ import aio_pika
 
 @dataclass
 class ClusterConfig:
-    """Configuration for distributed cluster connections"""
+    """
+    Configuration for distributed cluster connections.
+    
+    For Docker networking, use container names (e.g., 'qdrant-node-1')
+    For local development, use localhost with mapped ports
+    """
     
     # Qdrant cluster nodes
-    qdrant_nodes: List[str] = None
+    qdrant_nodes: List[str] = field(default_factory=list)
     
-    # MongoDB replica set
-    mongodb_uri: str = "mongodb://mongo-primary:27017,mongo-secondary-1:27017,mongo-secondary-2:27017/?replicaSet=rs0"
+    # MongoDB replica set URI
+    mongodb_uri: str = ""
     
     # Redis cluster nodes
-    redis_nodes: List[Dict[str, Any]] = None
+    redis_nodes: List[Dict[str, Any]] = field(default_factory=list)
     
     # RabbitMQ cluster nodes
-    rabbitmq_nodes: List[str] = None
+    rabbitmq_nodes: List[str] = field(default_factory=list)
+    
+    # Use Docker internal networking (container names)
+    use_docker_network: bool = False
     
     def __post_init__(self):
-        if self.qdrant_nodes is None:
-            self.qdrant_nodes = [
-                "http://localhost:6333",
-                "http://localhost:6336",
-                "http://localhost:6338",
-            ]
-        if self.redis_nodes is None:
-            self.redis_nodes = [
-                {"host": "localhost", "port": 6379},
-                {"host": "localhost", "port": 6380},
-                {"host": "localhost", "port": 6381},
-            ]
-        if self.rabbitmq_nodes is None:
-            self.rabbitmq_nodes = [
-                "amqp://raguser:ragpass@localhost:5672/",
-                "amqp://raguser:ragpass@localhost:5673/",
-                "amqp://raguser:ragpass@localhost:5674/",
-            ]
+        if not self.qdrant_nodes:
+            if self.use_docker_network:
+                self.qdrant_nodes = [
+                    "http://qdrant-node-1:6333",
+                    "http://qdrant-node-2:6333",
+                    "http://qdrant-node-3:6333",
+                ]
+            else:
+                # Local development - use localhost with mapped ports
+                self.qdrant_nodes = [
+                    "http://localhost:6333",
+                    "http://localhost:6336",
+                    "http://localhost:6338",
+                ]
+        
+        if not self.mongodb_uri:
+            if self.use_docker_network:
+                self.mongodb_uri = "mongodb://mongo-primary:27017,mongo-secondary-1:27017,mongo-secondary-2:27017/?replicaSet=rs0"
+            else:
+                self.mongodb_uri = "mongodb://localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0"
+        
+        if not self.redis_nodes:
+            if self.use_docker_network:
+                self.redis_nodes = [
+                    {"host": "redis-node-1", "port": 6379},
+                    {"host": "redis-node-2", "port": 6379},
+                    {"host": "redis-node-3", "port": 6379},
+                    {"host": "redis-node-4", "port": 6379},
+                    {"host": "redis-node-5", "port": 6379},
+                    {"host": "redis-node-6", "port": 6379},
+                ]
+            else:
+                self.redis_nodes = [
+                    {"host": "localhost", "port": 6379},
+                    {"host": "localhost", "port": 6380},
+                    {"host": "localhost", "port": 6381},
+                    {"host": "localhost", "port": 6382},
+                    {"host": "localhost", "port": 6383},
+                    {"host": "localhost", "port": 6384},
+                ]
+        
+        if not self.rabbitmq_nodes:
+            if self.use_docker_network:
+                self.rabbitmq_nodes = [
+                    "amqp://raguser:ragpass@rabbitmq-node-1:5672/",
+                    "amqp://raguser:ragpass@rabbitmq-node-2:5672/",
+                    "amqp://raguser:ragpass@rabbitmq-node-3:5672/",
+                ]
+            else:
+                self.rabbitmq_nodes = [
+                    "amqp://raguser:ragpass@localhost:5672/",
+                    "amqp://raguser:ragpass@localhost:5673/",
+                    "amqp://raguser:ragpass@localhost:5674/",
+                ]
 
 
 class QdrantClusterClient:

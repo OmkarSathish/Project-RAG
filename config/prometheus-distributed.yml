@@ -1,0 +1,33 @@
+# Prometheus configuration for distributed RAG cluster
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Qdrant Cluster (3 nodes)
+  - job_name: 'qdrant-cluster'
+    static_configs:
+      - targets: 
+          - 'qdrant-node-1:6333'
+          - 'qdrant-node-2:6333'
+          - 'qdrant-node-3:6333'
+    metrics_path: '/metrics'
+
+  # RabbitMQ Cluster (3 nodes)
+  - job_name: 'rabbitmq-cluster'
+    static_configs:
+      - targets:
+          - 'rabbitmq-node-1:15692'
+          - 'rabbitmq-node-2:15692'
+          - 'rabbitmq-node-3:15692'
+
+  # RAG Application
+  - job_name: 'rag-application'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: '/metrics'

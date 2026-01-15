@@ -1,0 +1,378 @@
+# ============================================
+# DISTRIBUTED RAG SYSTEM - DOCKER COMPOSE
+# ============================================
+# Multi-node cluster configuration for production-like testing
+#
+# Start with: docker-compose -f docker-compose.distributed.yml up -d
+# Stop with:  docker-compose -f docker-compose.distributed.yml down
+#
+# This setup includes:
+# - 3-node Qdrant cluster (with replication)
+# - 3-node MongoDB replica set
+# - 6-node Redis cluster (3 masters + 3 replicas)
+# - 3-node RabbitMQ cluster
+# - Prometheus + Grafana monitoring
+
+services:
+  # ============================================
+  # QDRANT CLUSTER (3 nodes)
+  # ============================================
+  qdrant-node-1:
+    image: qdrant/qdrant:v1.16.2
+    container_name: qdrant-node-1
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    environment:
+      QDRANT__CLUSTER__ENABLED: "true"
+      QDRANT__CLUSTER__P2P__PORT: "6335"
+    volumes:
+      - qdrant_data_1:/qdrant/storage
+    networks:
+      - rag_distributed_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant-node-2:
+    image: qdrant/qdrant:v1.16.2
+    container_name: qdrant-node-2
+    ports:
+      - "6336:6333"
+      - "6337:6334"
+    environment:
+      QDRANT__CLUSTER__ENABLED: "true"
+      QDRANT__CLUSTER__P2P__PORT: "6335"
+      QDRANT__CLUSTER__BOOTSTRAP: "http://qdrant-node-1:6335"
+    volumes:
+      - qdrant_data_2:/qdrant/storage
+    depends_on:
+      qdrant-node-1:
+        condition: service_healthy
+    networks:
+      - rag_distributed_network
+
+  qdrant-node-3:
+    image: qdrant/qdrant:v1.16.2
+    container_name: qdrant-node-3
+    ports:
+      - "6338:6333"
+      - "6339:6334"
+    environment:
+      QDRANT__CLUSTER__ENABLED: "true"
+      QDRANT__CLUSTER__P2P__PORT: "6335"
+      QDRANT__CLUSTER__BOOTSTRAP: "http://qdrant-node-1:6335"
+    volumes:
+      - qdrant_data_3:/qdrant/storage
+    depends_on:
+      qdrant-node-1:
+        condition: service_healthy
+    networks:
+      - rag_distributed_network
+
+  # ============================================
+  # MONGODB REPLICA SET (3 nodes)
+  # ============================================
+  mongo-primary:
+    image: mongo:7
+    container_name: mongo-primary
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_primary_data:/data/db
+    networks:
+      - rag_distributed_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo-secondary-1:
+    image: mongo:7
+    container_name: mongo-secondary-1
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_secondary_1_data:/data/db
+    depends_on:
+      mongo-primary:
+        condition: service_healthy
+    networks:
+      - rag_distributed_network
+
+  mongo-secondary-2:
+    image: mongo:7
+    container_name: mongo-secondary-2
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo_secondary_2_data:/data/db
+    depends_on:
+      mongo-primary:
+        condition: service_healthy
+    networks:
+      - rag_distributed_network
+
+  mongo-init:
+    image: mongo:7
+    container_name: mongo-init
+    depends_on:
+      mongo-primary:
+        condition: service_healthy
+      mongo-secondary-1:
+        condition: service_started
+      mongo-secondary-2:
+        condition: service_started
+    command: >
+      mongosh --host mongo-primary:27017 --eval '
+        rs.initiate({
+          _id: "rs0",
+          members: [
+            { _id: 0, host: "mongo-primary:27017", priority: 2 },
+            { _id: 1, host: "mongo-secondary-1:27017", priority: 1 },
+            { _id: 2, host: "mongo-secondary-2:27017", priority: 1 }
+          ]
+        })
+      '
+    networks:
+      - rag_distributed_network
+
+  # ============================================
+  # REDIS CLUSTER (6 nodes: 3 masters + 3 replicas)
+  # ============================================
+  redis-node-1:
+    image: redis:7-alpine
+    container_name: redis-node-1
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 6379
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_1:/data
+    networks:
+      - rag_distributed_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-node-2:
+    image: redis:7-alpine
+    container_name: redis-node-2
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 6379
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data_2:/data
+    networks:
+      - rag_distributed_network
+
+  redis-node-3:
+    image: redis:7-alpine
+    container_name: redis-node-3
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 6379
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_data_3:/data
+    networks:
+      - rag_distributed_network
+
+  redis-node-4:
+    image: redis:7-alpine
+    container_name: redis-node-4
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 6379
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_data_4:/data
+    networks:
+      - rag_distributed_network
+
+  redis-node-5:
+    image: redis:7-alpine
+    container_name: redis-node-5
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 6379
+    ports:
+      - "6383:6379"
+    volumes:
+      - redis_data_5:/data
+    networks:
+      - rag_distributed_network
+
+  redis-node-6:
+    image: redis:7-alpine
+    container_name: redis-node-6
+    command: redis-server --cluster-enabled yes --cluster-config-file nodes.conf --cluster-node-timeout 5000 --appendonly yes --port 6379
+    ports:
+      - "6384:6379"
+    volumes:
+      - redis_data_6:/data
+    networks:
+      - rag_distributed_network
+
+  redis-cluster-init:
+    image: redis:7-alpine
+    container_name: redis-cluster-init
+    depends_on:
+      redis-node-1:
+        condition: service_healthy
+      redis-node-2:
+        condition: service_started
+      redis-node-3:
+        condition: service_started
+      redis-node-4:
+        condition: service_started
+      redis-node-5:
+        condition: service_started
+      redis-node-6:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sleep 5
+        echo "Creating Redis Cluster..."
+        redis-cli --cluster create \
+          redis-node-1:6379 \
+          redis-node-2:6379 \
+          redis-node-3:6379 \
+          redis-node-4:6379 \
+          redis-node-5:6379 \
+          redis-node-6:6379 \
+          --cluster-replicas 1 --cluster-yes
+        echo "Redis Cluster created!"
+    networks:
+      - rag_distributed_network
+
+  # ============================================
+  # RABBITMQ CLUSTER (3 nodes)
+  # ============================================
+  rabbitmq-node-1:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-node-1
+    hostname: rabbitmq-node-1
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: raguser
+      RABBITMQ_DEFAULT_PASS: ragpass
+      RABBITMQ_ERLANG_COOKIE: "rag_secret_cookie"
+    volumes:
+      - rabbitmq_data_1:/var/lib/rabbitmq
+    networks:
+      - rag_distributed_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq-node-2:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-node-2
+    hostname: rabbitmq-node-2
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: raguser
+      RABBITMQ_DEFAULT_PASS: ragpass
+      RABBITMQ_ERLANG_COOKIE: "rag_secret_cookie"
+    volumes:
+      - rabbitmq_data_2:/var/lib/rabbitmq
+    depends_on:
+      rabbitmq-node-1:
+        condition: service_healthy
+    networks:
+      - rag_distributed_network
+
+  rabbitmq-node-3:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-node-3
+    hostname: rabbitmq-node-3
+    ports:
+      - "5674:5672"
+      - "15674:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: raguser
+      RABBITMQ_DEFAULT_PASS: ragpass
+      RABBITMQ_ERLANG_COOKIE: "rag_secret_cookie"
+    volumes:
+      - rabbitmq_data_3:/var/lib/rabbitmq
+    depends_on:
+      rabbitmq-node-1:
+        condition: service_healthy
+    networks:
+      - rag_distributed_network
+
+  # ============================================
+  # MONITORING STACK
+  # ============================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus-distributed
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus-distributed.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_distributed_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - rag_distributed_network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana-distributed
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_distributed_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - rag_distributed_network
+
+networks:
+  rag_distributed_network:
+    driver: bridge
+
+volumes:
+  qdrant_data_1:
+  qdrant_data_2:
+  qdrant_data_3:
+  mongo_primary_data:
+  mongo_secondary_1_data:
+  mongo_secondary_2_data:
+  redis_data_1:
+  redis_data_2:
+  redis_data_3:
+  redis_data_4:
+  redis_data_5:
+  redis_data_6:
+  rabbitmq_data_1:
+  rabbitmq_data_2:
+  rabbitmq_data_3:
+  prometheus_distributed_data:
+  grafana_distributed_data:

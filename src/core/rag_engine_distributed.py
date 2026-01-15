@@ -134,11 +134,11 @@ class DistributedRAGEngine:
                 reranker.rerank, user_query, documents, top_k=4
             )
             
-            # Format context
+            # Format context - handle both LangChain and direct Qdrant payload formats
             context = "\n\n".join([
                 f"Page Content: {doc.page_content}\n"
-                f"Page Number: {doc.metadata['page_label']}\n"
-                f"File Location: {doc.metadata['source']}"
+                f"Page Number: {doc.metadata.get('page_label', doc.metadata.get('page', 'N/A'))}\n"
+                f"File Location: {doc.metadata.get('source', 'Unknown')}"
                 for doc in reranked
             ])
             
