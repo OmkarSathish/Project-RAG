@@ -48,15 +48,16 @@ class SingleNodeConfig:
 class DistributedConfig:
     """Configuration for distributed production cluster"""
     
-    # Qdrant cluster nodes
+    # Qdrant single node (with sharding support)
+    # Note: Multi-node Qdrant clusters have complex initialization requirements
+    # For production, use Qdrant Cloud. For local testing, we use single node with sharding.
     qdrant_nodes: List[str] = field(default_factory=lambda: [
         "http://localhost:6333",
-        "http://localhost:6336",
-        "http://localhost:6338",
     ])
     
     # MongoDB replica set URI
-    mongodb_uri: str = "mongodb://mongo-primary:27017,mongo-secondary-1:27017,mongo-secondary-2:27017/?replicaSet=rs0"
+    # When running application outside Docker, use localhost with mapped ports
+    mongodb_uri: str = "mongodb://localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0"
     
     # Redis cluster startup nodes
     redis_nodes: List[Dict[str, Any]] = field(default_factory=lambda: [

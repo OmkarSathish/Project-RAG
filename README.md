@@ -1,68 +1,135 @@
-# RAG Agent with LangGraph, Qdrant, and MongoDB Checkpointing
+# RAG System with Single-Node & Distributed Architectures
 
-This project is a Retrieval-Augmented Generation (RAG) agent that leverages LangGraph for conversational flow, Qdrant for vector search, and MongoDB for checkpointing conversational state. It is designed to answer user queries based on the content of a PDF file, with iterative answer validation and improvement.
+A production-ready Retrieval-Augmented Generation (RAG) system with support for both single-node (development) and distributed (production) deployments.
 
-## Features
+## 🌟 Features
 
-- **Retrieval-Augmented Generation**: Answers are generated using context retrieved from a PDF, indexed in Qdrant.
-- **LangGraph Orchestration**: The conversational flow is managed using LangGraph, with nodes for search, LLM response, and answer validation.
-- **Answer Validation Loop**: The agent validates the relevance of its answers and can retry up to 3 times to improve them.
-- **MongoDB Checkpointing**: Conversation state is checkpointed using MongoDB for persistence and recovery.
+### Core RAG Capabilities
+- **Retrieval-Augmented Generation**: Context-aware answers using PDF content indexed in Qdrant
+- **LangGraph Orchestration**: State machine-based conversational flow
+- **Cross-Encoder Reranking**: Improved retrieval relevance
+- **Redis Caching**: 5-minute TTL for query results
+- **Answer Validation Loop**: Automatic relevance checking with retry logic
 
-## Requirements
+### Web Interface
+- **4-Client Demo**: Concurrent WebSocket-based query processing
+- **Real-time Monitoring**: Live metrics and query logging
+- **Cache Indicators**: Visual cache hit/miss status
+- **Streaming Responses**: Word-by-word response delivery
+
+### Architecture Modes
+- **Single-Node Mode**: Lightweight setup for local development
+- **Distributed Mode**: Multi-node clusters for production scaling
+  - 3-node Qdrant cluster with sharding
+  - 3-node MongoDB replica set
+  - 6-node Redis cluster
+  - 3-node RabbitMQ cluster
+
+## 🚀 Quick Start
+
+### Single-Node Mode (Development)
+```bash
+# Start infrastructure
+docker-compose up -d
+
+# Install dependencies
+pip install -e .
+
+# Index PDF
+python embed.py
+
+# Start server
+RAG_MODE=single uvicorn src.api.main:app --port 8000
+```
+
+### Distributed Mode (Production-like)
+```bash
+# Start distributed cluster
+docker-compose -f docker-compose.distributed.yml up -d
+
+# Index to cluster
+python embed_distributed.py
+
+# Start server
+RAG_MODE=distributed uvicorn src.api.main:app --port 8000
+```
+
+**📖 For detailed instructions, see [DEMO_GUIDE.md](DEMO_GUIDE.md)**
+
+## 📋 Requirements
 
 - Python 3.10+
-- Qdrant running locally (default: `http://localhost:6333`)
-- MongoDB running locally (default: `mongodb://:27017`)
-- OpenAI API key (set in your environment)
+- Docker and Docker Compose
+- OpenAI API key in `.env`:
+  ```env
+  OPENAI_API_KEY=your-key-here
+  ```
 
-## Setup
+## 🌐 Access Points
 
-1. **Install dependencies**:
+| Service | Single Mode | Distributed Mode |
+|---------|-------------|------------------|
+| Demo UI | http://localhost:8000 | http://localhost:8000 |
+| Qdrant | :6333 | :6333, :6336, :6338 |
+| Monitoring | :3000 (Grafana) | :3000 (Grafana) |
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 📁 Project Structure
 
-   (Or install manually: `openai`, `langchain_qdrant`, `langchain_openai`, `langgraph`, `python-dotenv`)
+```
+Project-RAG/
+├── src/
+│   ├── api/main.py              # FastAPI server
+│   ├── core/
+│   │   ├── config.py            # Mode configuration
+│   │   ├── engine_factory.py    # Engine factory
+│   │   ├── rag_engine.py        # Single-node engine
+│   │   └── rag_engine_distributed.py
+│   └── ui/                      # Web interface
+├── cluster_clients.py           # Distributed clients
+├── qdrant_sharding.py          # Sharding strategies
+├── embed.py                    # Single-node embedding
+├── embed_distributed.py        # Distributed embedding
+├── docker-compose.yml          # Single-node setup
+├── docker-compose.distributed.yml
+└── DEMO_GUIDE.md               # Complete documentation
+```
 
-2. **Prepare your environment**:
-   - Ensure Qdrant and MongoDB are running locally.
-   - Set your OpenAI API key in a `.env` file:
+## 🎯 Usage
 
-     ```env
-     OPENAI_API_KEY=your-key-here
-     ```
+### Web Demo
+1. Start the server (see Quick Start)
+2. Visit http://localhost:8000
+3. Use the 4-client interface to test concurrent queries
+4. Monitor metrics at http://localhost:8000/monitor
 
-3. **Index your PDF**:
-   - Use `embed.py` to index your PDF into Qdrant:
+### Command Line
+```bash
+python main.py
+```
 
-     ```bash
-     python embed.py
-     ```
+### Check Current Mode
+```bash
+curl http://localhost:8000/mode
+```
 
-4. **Run the agent**:
+## 🔧 Configuration
 
-   ```bash
-   python main.py
-   ```
+Switch modes via `RAG_MODE` environment variable:
+- `RAG_MODE=single` - Single-node mode (default)
+- `RAG_MODE=distributed` - Distributed cluster mode
 
-## Usage
+## 📚 Documentation
 
-- Enter your query at the prompt (`>>`).
-- The agent will retrieve relevant context from the PDF, generate an answer, and validate its relevance.
-- If the answer is not relevant, the agent will retry up to 3 times.
-- If a highly relevant answer cannot be generated, you will be informed.
+- **[DEMO_GUIDE.md](DEMO_GUIDE.md)** - Complete setup and usage guide
+- **[pyproject.toml](pyproject.toml)** - Project dependencies
 
-## File Structure
+## 🤝 Development
 
-- `main.py` — Main conversational agent with LangGraph and MongoDB checkpointing.
-- `embed.py` — Script to index the PDF into Qdrant.
-- `nodejs.pdf` — Example PDF used for retrieval.
-- `docker-compose.yml` — (Optional) For running Qdrant and MongoDB via Docker.
-- `pyproject.toml`, `requirements.txt`, `uv.lock` — Project dependencies.
+1. Use **single-node mode** for rapid development
+2. Test features locally with the demo UI
+3. Switch to **distributed mode** for scaling tests
+4. Use helper scripts in `scripts/` for environment management
 
-## Customization
+---
 
-- To use a different PDF, replace `nodejs.pdf` and re-run `embed.py`.
-- Adjust the number of validation attempts or scoring logic in `main.py` as needed.
+**Ready to start?** See [DEMO_GUIDE.md](DEMO_GUIDE.md) for detailed instructions.

@@ -12,6 +12,10 @@ wheels/
 /qdrant_data
 /redis_data
 /rabbitmq_data
+/grafana_data
+/prometheus_data
+DEMO_GUIDE.md
+ref.txt
 
 .env
 .env.dev

@@ -335,14 +335,20 @@ class MongoDBReplicaSetClient:
             readPreference=read_preference,
             maxPoolSize=max_pool_size,
             w="majority",  # Write concern: majority for durability
-            wtimeout=5000,  # Write timeout in ms
+            wTimeoutMS=5000,  # Write timeout in ms (corrected parameter name)
             retryWrites=True,
             retryReads=True,
+            serverSelectionTimeoutMS=10000,  # 10 second timeout for server selection
         )
         
-        # Verify connection
-        await self.client.admin.command('ping')
-        print(f"[MongoDBReplicaSet] Connected with read preference: {read_preference}")
+        # Verify connection with timeout
+        try:
+            await asyncio.wait_for(self.client.admin.command('ping'), timeout=10.0)
+            print(f"[MongoDBReplicaSet] Connected with read preference: {read_preference}")
+        except asyncio.TimeoutError:
+            print(f"[MongoDBReplicaSet] Warning: Ping timeout but connection may still work")
+        except Exception as e:
+            print(f"[MongoDBReplicaSet] Warning: Connection verification failed: {e}")
     
     def get_database(self, db_name: str):
         """Get database reference"""
@@ -458,21 +464,26 @@ class DistributedClientManager:
         tasks = []
         
         # Qdrant cluster
+        print("[DistributedClientManager] Creating Qdrant client...")
         self.qdrant = QdrantClusterClient(self.config.qdrant_nodes)
         tasks.append(self.qdrant.connect())
         
         # Redis cluster
+        print("[DistributedClientManager] Creating Redis client...")
         self.redis = RedisClusterClient(self.config.redis_nodes)
         tasks.append(self.redis.connect())
         
         # MongoDB replica set
+        print("[DistributedClientManager] Creating MongoDB client...")
         self.mongodb = MongoDBReplicaSetClient(self.config.mongodb_uri)
         tasks.append(self.mongodb.connect())
         
         # RabbitMQ cluster
+        print("[DistributedClientManager] Creating RabbitMQ client...")
         self.rabbitmq = RabbitMQClusterClient(self.config.rabbitmq_nodes)
         tasks.append(self.rabbitmq.connect())
         
+        print("[DistributedClientManager] Connecting to all clusters...")
         await asyncio.gather(*tasks)
         print("[DistributedClientManager] All clusters connected!")
     

@@ -15,19 +15,18 @@
 
 services:
   # ============================================
-  # QDRANT CLUSTER (3 nodes)
+  # QDRANT VECTOR DATABASE
+  # Single node with sharding support
+  # (Multi-node Qdrant cluster is complex - use Qdrant Cloud for production)
   # ============================================
-  qdrant-node-1:
+  qdrant:
     image: qdrant/qdrant:v1.16.2
-    container_name: qdrant-node-1
+    container_name: qdrant-distributed
     ports:
       - "6333:6333"
       - "6334:6334"
-    environment:
-      QDRANT__CLUSTER__ENABLED: "true"
-      QDRANT__CLUSTER__P2P__PORT: "6335"
     volumes:
-      - qdrant_data_1:/qdrant/storage
+      - qdrant_data:/qdrant/storage
     networks:
       - rag_distributed_network
     healthcheck:
@@ -35,42 +34,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  qdrant-node-2:
-    image: qdrant/qdrant:v1.16.2
-    container_name: qdrant-node-2
-    ports:
-      - "6336:6333"
-      - "6337:6334"
-    environment:
-      QDRANT__CLUSTER__ENABLED: "true"
-      QDRANT__CLUSTER__P2P__PORT: "6335"
-      QDRANT__CLUSTER__BOOTSTRAP: "http://qdrant-node-1:6335"
-    volumes:
-      - qdrant_data_2:/qdrant/storage
-    depends_on:
-      qdrant-node-1:
-        condition: service_healthy
-    networks:
-      - rag_distributed_network
-
-  qdrant-node-3:
-    image: qdrant/qdrant:v1.16.2
-    container_name: qdrant-node-3
-    ports:
-      - "6338:6333"
-      - "6339:6334"
-    environment:
-      QDRANT__CLUSTER__ENABLED: "true"
-      QDRANT__CLUSTER__P2P__PORT: "6335"
-      QDRANT__CLUSTER__BOOTSTRAP: "http://qdrant-node-1:6335"
-    volumes:
-      - qdrant_data_3:/qdrant/storage
-    depends_on:
-      qdrant-node-1:
-        condition: service_healthy
-    networks:
-      - rag_distributed_network
 
   # ============================================
   # MONGODB REPLICA SET (3 nodes)
@@ -359,9 +322,7 @@ networks:
     driver: bridge
 
 volumes:
-  qdrant_data_1:
-  qdrant_data_2:
-  qdrant_data_3:
+  qdrant_data:
   mongo_primary_data:
   mongo_secondary_1_data:
   mongo_secondary_2_data:

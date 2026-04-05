@@ -16,6 +16,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 import sys
 import os
+import time
 
 # Add src and project root to path BEFORE importing local modules
 src_path = Path(__file__).parent.parent
@@ -28,9 +29,48 @@ from core.config import get_config
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi import Request
 import asyncio
+
+# Prometheus metrics
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+
+# Define Prometheus metrics
+QUERY_COUNTER = Counter(
+    'rag_queries_total',
+    'Total number of RAG queries processed',
+    ['client_id', 'status']
+)
+
+CACHE_COUNTER = Counter(
+    'rag_cache_operations_total',
+    'Cache hits and misses',
+    ['operation']  # hit or miss
+)
+
+QUERY_DURATION = Histogram(
+    'rag_query_duration_seconds',
+    'Time spent processing queries',
+    ['client_id'],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
+)
+
+ACTIVE_CONNECTIONS = Gauge(
+    'rag_active_connections',
+    'Number of active WebSocket connections'
+)
+
+ACTIVE_QUERIES = Gauge(
+    'rag_active_queries',
+    'Number of queries currently being processed'
+)
+
+RELEVANCE_SCORE = Histogram(
+    'rag_relevance_score',
+    'Distribution of answer relevance scores',
+    buckets=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+)
 
 
 # Global RAG engine (initialized on startup)
@@ -102,7 +142,7 @@ async def monitor(request: Request):
 
 @app.get("/metrics")
 async def get_metrics():
-    """Get system metrics"""
+    """Get system metrics (JSON format for UI)"""
     avg_time = (
         round(metrics["total_time"] / metrics["total_queries"], 2)
         if metrics["total_queries"] > 0
@@ -121,6 +161,19 @@ async def get_metrics():
         "avg_response_time": avg_time,
         "active_clients": len(active_connections),
     }
+
+
+@app.get("/metrics/prometheus")
+async def prometheus_metrics():
+    """Expose Prometheus metrics endpoint"""
+    # Update gauge metrics with current values
+    ACTIVE_CONNECTIONS.set(len(active_connections))
+    ACTIVE_QUERIES.set(len(active_queries))
+    
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
 
 
 @app.get("/monitor/data")
@@ -152,6 +205,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     """
     await websocket.accept()
     active_connections[client_id] = websocket
+    ACTIVE_CONNECTIONS.inc()  # Prometheus: increment active connections
 
     try:
         await websocket.send_json(
@@ -169,6 +223,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             if data["type"] == "query":
                 query = data["query"]
                 query_id = f"{client_id}_{datetime.now().timestamp()}"
+                start_time = time.time()  # Start timing for Prometheus
 
                 query_entry = {
                     "query_id": query_id,
@@ -180,6 +235,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "processing_time": None,
                 }
                 active_queries[query_id] = query_entry
+                ACTIVE_QUERIES.inc()  # Prometheus: increment active queries
 
                 # Send processing status
                 await websocket.send_json(
@@ -193,6 +249,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 try:
                     # Process query (async, non-blocking!)
                     result = await rag_engine.process_query(query, client_id)
+                    
+                    # Calculate duration for Prometheus
+                    duration = time.time() - start_time
 
                     query_entry["status"] = "completed"
                     query_entry["cache_hit"] = result["cache_hit"]
@@ -200,12 +259,25 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
                     query_log.append(query_entry.copy())
                     del active_queries[query_id]
+                    ACTIVE_QUERIES.dec()  # Prometheus: decrement active queries
 
                     # Update metrics
                     metrics["total_queries"] += 1
                     metrics["total_time"] += result["processing_time"]
+                    
+                    # Update Prometheus metrics
+                    QUERY_COUNTER.labels(client_id=client_id, status="success").inc()
+                    QUERY_DURATION.labels(client_id=client_id).observe(duration)
+                    
                     if result["cache_hit"]:
                         metrics["cache_hits"] += 1
+                        CACHE_COUNTER.labels(operation="hit").inc()
+                    else:
+                        CACHE_COUNTER.labels(operation="miss").inc()
+                    
+                    # Track relevance score if available
+                    if "relevance_score" in result and result["relevance_score"] is not None:
+                        RELEVANCE_SCORE.observe(result["relevance_score"])
 
                     # Send response in chunks (simulate streaming)
                     response_text = result["response"]
@@ -237,6 +309,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     query_log.append(query_entry.copy())
                     if query_id in active_queries:
                         del active_queries[query_id]
+                        ACTIVE_QUERIES.dec()  # Prometheus: decrement active queries
+                    
+                    # Prometheus: track failed queries
+                    QUERY_COUNTER.labels(client_id=client_id, status="error").inc()
 
                     await websocket.send_json(
                         {"type": "error",
@@ -244,11 +320,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     )
 
     except WebSocketDisconnect:
+        ACTIVE_CONNECTIONS.dec()  # Prometheus: decrement on disconnect
         if client_id in active_connections:
             del active_connections[client_id]
         print(f"Client {client_id} disconnected")
 
     except Exception as e:
+        ACTIVE_CONNECTIONS.dec()  # Prometheus: decrement on error
         print(f"Error with client {client_id}: {e}")
         if client_id in active_connections:
             del active_connections[client_id]
